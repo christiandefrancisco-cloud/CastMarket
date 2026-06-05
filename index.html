@@ -1,0 +1,8 @@
+export default function handler(req, res) {
+  // Inject keys as JS variables for the frontend
+  res.setHeader('Content-Type', 'application/javascript');
+  res.send(`
+    window.__CM_ANTHROPIC_KEY__ = "${process.env.ANTHROPIC_KEY || ''}";
+    window.__CM_ELEVENLABS_KEY__ = "${process.env.ELEVENLABS_KEY || ''}";
+  `);
+}
