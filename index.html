@@ -1,8 +1,878 @@
-export default function handler(req, res) {
-  // Inject keys as JS variables for the frontend
-  res.setHeader('Content-Type', 'application/javascript');
-  res.send(`
-    window.__CM_ANTHROPIC_KEY__ = "${process.env.ANTHROPIC_KEY || ''}";
-    window.__CM_ELEVENLABS_KEY__ = "${process.env.ELEVENLABS_KEY || ''}";
-  `);
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CastMarket — Mercados & Economía Global</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Sans:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080c10;
+    --surface: #0e1520;
+    --surface2: #141e2e;
+    --border: #1e2d42;
+    --accent: #00e5ff;
+    --accent2: #ff6b35;
+    --gold: #f0c040;
+    --green: #00d68f;
+    --red: #ff3d71;
+    --text: #e8edf4;
+    --muted: #6b7fa3;
+    --font-display: 'Playfair Display', Georgia, serif;
+    --font-body: 'DM Sans', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:var(--font-body); font-size:15px; line-height:1.6; overflow-x:hidden; }
+
+  /* TICKER */
+  .ticker-bar { background:var(--surface); border-bottom:1px solid var(--border); overflow:hidden; height:36px; display:flex; align-items:center; }
+  .ticker-label { background:var(--accent); color:#000; font-family:var(--font-mono); font-size:11px; font-weight:600; padding:0 14px; height:100%; display:flex; align-items:center; white-space:nowrap; letter-spacing:1px; flex-shrink:0; }
+  .ticker-track { display:flex; animation:ticker 50s linear infinite; }
+  .ticker-item { display:flex; align-items:center; gap:6px; padding:0 24px; font-family:var(--font-mono); font-size:12px; white-space:nowrap; border-right:1px solid var(--border); }
+  .ticker-sym { color:var(--muted); font-weight:500; }
+  .ticker-price { color:var(--text); font-weight:500; }
+  .ticker-change.up { color:var(--green); }
+  .ticker-change.down { color:var(--red); }
+  @keyframes ticker { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+
+  /* HEADER */
+  header { background:rgba(8,12,16,0.95); border-bottom:1px solid var(--border); padding:0 40px; position:sticky; top:0; z-index:100; backdrop-filter:blur(12px); }
+  .header-inner { max-width:1400px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; height:64px; }
+  .logo { font-family:var(--font-display); font-size:26px; font-weight:900; letter-spacing:-1px; color:var(--text); text-decoration:none; }
+  .logo span { color:var(--accent); }
+  .logo-sub { font-family:var(--font-mono); font-size:9px; color:var(--muted); letter-spacing:3px; display:block; margin-top:-4px; }
+  nav { display:flex; gap:2px; }
+  nav a { color:var(--muted); text-decoration:none; font-size:13px; font-weight:500; padding:6px 14px; border-radius:6px; transition:all 0.2s; }
+  nav a:hover, nav a.active { color:var(--text); background:var(--surface2); }
+  nav a.active { color:var(--accent); }
+  .live-badge { display:flex; align-items:center; gap:6px; background:rgba(255,61,113,0.12); border:1px solid rgba(255,61,113,0.3); color:var(--red); font-family:var(--font-mono); font-size:10px; font-weight:600; letter-spacing:1.5px; padding:5px 10px; border-radius:4px; }
+  .live-dot { width:6px; height:6px; background:var(--red); border-radius:50%; animation:blink 1.2s ease-in-out infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+  /* MARKET STRIP */
+  .market-strip { max-width:1400px; margin:0 auto; padding:20px 40px 0; display:grid; grid-template-columns:repeat(5,1fr); gap:12px; }
+  .market-tile { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px; }
+  .market-tile.up { border-top:2px solid var(--green); }
+  .market-tile.down { border-top:2px solid var(--red); }
+  .market-name { font-size:11px; color:var(--muted); letter-spacing:0.5px; margin-bottom:4px; }
+  .market-sym { font-family:var(--font-mono); font-size:13px; font-weight:600; color:var(--text); margin-bottom:8px; }
+  .market-price { font-family:var(--font-mono); font-size:20px; font-weight:600; color:var(--text); }
+  .market-change { font-family:var(--font-mono); font-size:12px; margin-top:3px; }
+  .market-change.up { color:var(--green); }
+  .market-change.down { color:var(--red); }
+
+  /* GEO BAR */
+  .geo-bar { max-width:1400px; margin:8px auto 0; padding:6px 40px; display:flex; align-items:center; gap:8px; font-size:11px; color:var(--muted); }
+  .geo-change-btn { margin-left:auto; cursor:pointer; color:var(--accent); font-size:11px; background:none; border:none; font-family:var(--font-body); }
+  .currency-picker { display:none; max-width:1400px; margin:8px auto 0; padding:0 40px; }
+  .currency-picker-inner { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:14px 18px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .region-btn { background:var(--surface); border:1px solid var(--border); color:var(--muted); font-family:var(--font-body); font-size:12px; padding:6px 14px; border-radius:20px; cursor:pointer; transition:all 0.2s; }
+  .region-btn:hover, .region-btn.active { border-color:var(--accent); color:var(--accent); background:rgba(0,229,255,0.06); }
+
+  /* HERO */
+  .hero { max-width:1400px; margin:0 auto; padding:24px 40px 0; display:grid; grid-template-columns:1fr 380px; gap:24px; }
+  .hero-main { position:relative; cursor:pointer; border-radius:12px; overflow:hidden; background:var(--surface); border:1px solid var(--border); transition:border-color 0.3s; }
+  .hero-main:hover { border-color:var(--accent); }
+  .hero-img-area { position:relative; height:360px; overflow:hidden; display:flex; align-items:flex-end; background:#050d18; }
+  .hero-img-area img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .hero-overlay { position:absolute; inset:0; background:linear-gradient(to top, rgba(8,12,16,0.97) 0%, rgba(8,12,16,0.3) 60%, transparent 100%); }
+  .hero-category { position:absolute; top:20px; left:20px; background:var(--accent2); color:#fff; font-size:10px; font-weight:700; letter-spacing:2px; padding:4px 10px; border-radius:3px; z-index:2; }
+  .hero-watch-btn { position:absolute; top:20px; right:20px; background:rgba(0,229,255,0.1); border:1px solid var(--accent); color:var(--accent); font-size:11px; font-weight:600; letter-spacing:1px; padding:8px 14px; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:6px; transition:all 0.2s; z-index:2; font-family:var(--font-body); }
+  .hero-watch-btn:hover { background:rgba(0,229,255,0.2); box-shadow:0 0 20px rgba(0,229,255,0.3); }
+  .hero-content { position:relative; z-index:2; padding:24px; }
+  .hero-meta { display:flex; align-items:center; gap:10px; font-size:12px; color:var(--muted); margin-bottom:8px; }
+  .hero-source { color:var(--accent); font-weight:600; }
+  .hero-title { font-family:var(--font-display); font-size:26px; font-weight:700; line-height:1.25; color:var(--text); letter-spacing:-0.5px; }
+  .hero-excerpt { padding:16px 24px 20px; color:var(--muted); font-size:14px; line-height:1.7; }
+
+  /* SIDEBAR */
+  .sidebar-news { display:flex; flex-direction:column; gap:1px; background:var(--border); border-radius:12px; overflow:hidden; border:1px solid var(--border); }
+  .sidebar-item { background:var(--surface); padding:14px 16px; cursor:pointer; transition:background 0.2s; display:flex; gap:12px; align-items:flex-start; }
+  .sidebar-item:hover { background:var(--surface2); }
+  .sidebar-thumb { width:68px; height:52px; object-fit:cover; border-radius:5px; flex-shrink:0; margin-top:2px; background:var(--surface2); }
+  .sidebar-content { flex:1; }
+  .sidebar-cat { font-size:10px; font-weight:700; letter-spacing:1.5px; margin-bottom:4px; text-transform:uppercase; }
+  .sidebar-title { font-family:var(--font-display); font-size:14px; font-weight:600; line-height:1.35; color:var(--text); margin-bottom:5px; }
+  .sidebar-meta { font-size:11px; color:var(--muted); display:flex; align-items:center; justify-content:space-between; }
+  .sidebar-ai-pill { background:rgba(0,229,255,0.08); border:1px solid rgba(0,229,255,0.2); color:var(--accent); font-size:9px; font-weight:700; letter-spacing:0.8px; padding:2px 7px; border-radius:20px; cursor:pointer; }
+
+  /* NEWS SECTIONS */
+  .sections-wrapper { max-width:1400px; margin:0 auto; padding:32px 40px; }
+  .section-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; padding-bottom:12px; border-bottom:1px solid var(--border); }
+  .section-title { font-family:var(--font-display); font-size:20px; font-weight:700; color:var(--text); display:flex; align-items:center; gap:10px; }
+  .section-link { font-size:12px; color:var(--accent); text-decoration:none; font-weight:500; opacity:0.7; }
+  .news-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  .news-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; cursor:pointer; transition:all 0.25s; }
+  .news-card:hover { border-color:var(--accent); transform:translateY(-3px); box-shadow:0 12px 40px rgba(0,229,255,0.08); }
+  .card-thumb { height:130px; overflow:hidden; position:relative; background:var(--surface2); }
+  .card-thumb img { width:100%; height:100%; object-fit:cover; }
+  .card-thumb-placeholder { width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:40px; }
+  .card-body { padding:16px; }
+  .card-cat { font-size:10px; font-weight:700; letter-spacing:1.5px; margin-bottom:8px; text-transform:uppercase; }
+  .card-title { font-family:var(--font-display); font-size:15px; font-weight:600; line-height:1.4; color:var(--text); margin-bottom:10px; }
+  .card-footer { display:flex; align-items:center; justify-content:space-between; }
+  .card-meta { font-size:11px; color:var(--muted); }
+  .card-source { font-size:10px; font-weight:600; color:var(--muted); }
+  .card-ai-btn { background:transparent; border:1px solid var(--border); color:var(--muted); font-size:11px; padding:4px 10px; border-radius:20px; cursor:pointer; display:flex; align-items:center; gap:4px; font-family:var(--font-body); transition:all 0.2s; }
+  .card-ai-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+  /* GEO SECTION */
+  .geo-alert { background:linear-gradient(90deg,rgba(255,61,61,0.08),transparent); border:1px solid rgba(255,107,107,0.25); border-left:3px solid #ff6b6b; border-radius:8px; padding:12px 18px; display:flex; align-items:center; gap:12px; font-size:13px; color:var(--muted); margin-bottom:20px; }
+  .geo-alert strong { color:#ff6b6b; }
+  .geo-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .geo-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; cursor:pointer; transition:all 0.25s; }
+  .geo-card:hover { border-color:#ff6b6b; transform:translateY(-2px); }
+  .geo-card-header { padding:14px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px; font-size:11px; font-weight:700; letter-spacing:1.5px; color:#ff6b6b; }
+  .geo-dot { width:7px; height:7px; background:#ff6b6b; border-radius:50%; animation:blink 1.5s ease-in-out infinite; }
+  .geo-img { height:150px; overflow:hidden; }
+  .geo-img img { width:100%; height:100%; object-fit:cover; filter:saturate(0.6) brightness(0.7); }
+  .geo-body { padding:16px 18px; }
+  .geo-pills { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+  .geo-pill { font-size:10px; font-weight:600; padding:3px 8px; border-radius:20px; border:1px solid; }
+  .geo-pill.oil { color:#f7931a; border-color:rgba(247,147,26,0.3); background:rgba(247,147,26,0.06); }
+  .geo-pill.gold { color:var(--gold); border-color:rgba(240,192,64,0.3); background:rgba(240,192,64,0.06); }
+  .geo-pill.btc { color:#f7931a; border-color:rgba(247,147,26,0.3); background:rgba(247,147,26,0.06); }
+  .geo-pill.gas { color:#60a5fa; border-color:rgba(96,165,250,0.3); background:rgba(96,165,250,0.06); }
+  .geo-pill.euro { color:#a78bfa; border-color:rgba(167,139,250,0.3); background:rgba(167,139,250,0.06); }
+  .geo-pill.wheat { color:var(--gold); border-color:rgba(240,192,64,0.3); background:rgba(240,192,64,0.06); }
+  .geo-headline { font-family:var(--font-display); font-size:15px; font-weight:700; line-height:1.4; color:var(--text); margin-bottom:8px; }
+  .geo-summary { font-size:13px; color:var(--muted); line-height:1.65; margin-bottom:14px; }
+  .geo-tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:14px; }
+  .geo-tile { background:var(--surface2); border-radius:6px; padding:8px 10px; text-align:center; }
+  .geo-tile-label { font-size:9px; color:var(--muted); letter-spacing:0.5px; margin-bottom:2px; }
+  .geo-tile-val { font-family:var(--font-mono); font-size:13px; font-weight:600; }
+  .geo-tile-val.up { color:var(--green); }
+  .geo-tile-val.down { color:var(--red); }
+  .geo-footer { display:flex; align-items:center; justify-content:space-between; padding-top:12px; border-top:1px solid var(--border); font-size:11px; color:var(--muted); }
+  .geo-footer span { color:var(--accent); }
+
+  /* NEWS MODAL */
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.9); backdrop-filter:blur(10px); z-index:1000; display:none; align-items:center; justify-content:center; padding:20px; }
+  .modal-overlay.active { display:flex; }
+  .modal { background:var(--surface); border:1px solid var(--border); border-radius:16px; width:100%; max-width:780px; max-height:90vh; overflow:hidden; display:flex; flex-direction:column; animation:modalIn 0.3s cubic-bezier(0.34,1.56,0.64,1); }
+  @keyframes modalIn { from{opacity:0;transform:scale(0.92) translateY(20px)} to{opacity:1;transform:scale(1) translateY(0)} }
+
+  /* MODE SWITCHER */
+  .mode-switcher { display:flex; gap:0; padding:16px 20px; border-bottom:1px solid var(--border); background:var(--surface2); }
+  .mode-btn { flex:1; padding:10px; border:1px solid var(--border); background:transparent; color:var(--muted); font-family:var(--font-body); font-size:13px; font-weight:500; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:8px; }
+  .mode-btn:first-child { border-radius:8px 0 0 8px; }
+  .mode-btn:last-child { border-radius:0 8px 8px 0; }
+  .mode-btn.active { background:var(--accent); border-color:var(--accent); color:#000; font-weight:700; }
+
+  /* HERMES SCREEN */
+  .hermes-screen { background:linear-gradient(160deg,#050d18,#091525); position:relative; overflow:hidden; flex-shrink:0; }
+  .tv-scanlines { position:absolute; inset:0; background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,229,255,0.015) 2px,rgba(0,229,255,0.015) 4px); pointer-events:none; z-index:1; }
+  .tv-corners span { position:absolute; width:24px; height:24px; border-color:var(--accent); border-style:solid; opacity:0.4; z-index:2; }
+  .tv-corners span:nth-child(1) { top:12px; left:12px; border-width:2px 0 0 2px; }
+  .tv-corners span:nth-child(2) { top:12px; right:12px; border-width:2px 2px 0 0; }
+  .tv-corners span:nth-child(3) { bottom:12px; left:12px; border-width:0 0 2px 2px; }
+  .tv-corners span:nth-child(4) { bottom:12px; right:12px; border-width:0 2px 2px 0; }
+  .hermes-content { position:relative; z-index:3; display:flex; align-items:center; justify-content:center; gap:32px; padding:32px; }
+  .hermes-avatar { width:100px; height:100px; border-radius:50%; background:linear-gradient(135deg,#1a3a5c,#0d2040); border:2px solid rgba(0,229,255,0.3); display:flex; align-items:center; justify-content:center; font-size:44px; position:relative; box-shadow:0 0 40px rgba(0,229,255,0.15); flex-shrink:0; }
+  .hermes-ring { position:absolute; inset:-8px; border-radius:50%; border:1.5px solid rgba(0,229,255,0.2); animation:pulse-ring 2s ease-out infinite; }
+  @keyframes pulse-ring { 0%{transform:scale(1);opacity:0.6} 100%{transform:scale(1.35);opacity:0} }
+  .hermes-info { flex:1; }
+  .hermes-name { font-family:var(--font-mono); font-size:13px; color:var(--accent); letter-spacing:3px; margin-bottom:4px; }
+  .hermes-role { font-size:11px; color:var(--muted); margin-bottom:12px; }
+  .hermes-status { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--muted); }
+  .wave-bars { display:flex; align-items:center; gap:2px; height:18px; }
+  .wave-bar { width:3px; background:var(--accent); border-radius:2px; opacity:0.6; }
+  .wave-bar:nth-child(1){height:5px;animation:wave 1s 0.0s ease-in-out infinite}
+  .wave-bar:nth-child(2){height:13px;animation:wave 1s 0.1s ease-in-out infinite}
+  .wave-bar:nth-child(3){height:9px;animation:wave 1s 0.2s ease-in-out infinite}
+  .wave-bar:nth-child(4){height:17px;animation:wave 1s 0.3s ease-in-out infinite}
+  .wave-bar:nth-child(5){height:7px;animation:wave 1s 0.4s ease-in-out infinite}
+  .wave-bar:nth-child(6){height:11px;animation:wave 1s 0.2s ease-in-out infinite}
+  .wave-bar:nth-child(7){height:15px;animation:wave 1s 0.1s ease-in-out infinite}
+  @keyframes wave { 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(0.25)} }
+  .lower-third { position:absolute; bottom:0; left:0; right:0; padding:10px 20px 12px; background:linear-gradient(to top,rgba(5,10,20,0.98),transparent); z-index:3; display:flex; align-items:center; justify-content:space-between; }
+  .lower-left { display:flex; align-items:center; gap:10px; }
+  .on-air { background:var(--red); color:#fff; font-size:9px; font-weight:700; letter-spacing:2px; padding:3px 8px; border-radius:2px; animation:blink 1.5s ease-in-out infinite; }
+  .lower-headline { font-family:var(--font-display); font-size:12px; color:var(--text); max-width:500px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .lower-clock { font-family:var(--font-mono); font-size:11px; color:var(--muted); }
+
+  /* AUDIO PLAYER */
+  .audio-player { padding:12px 20px; background:var(--surface2); border-bottom:1px solid var(--border); display:none; align-items:center; gap:12px; }
+  .audio-player.visible { display:flex; }
+  .audio-progress { flex:1; height:4px; background:var(--border); border-radius:2px; overflow:hidden; }
+  .audio-progress-bar { height:100%; background:var(--accent); border-radius:2px; transition:width 0.1s; }
+  .audio-time { font-family:var(--font-mono); font-size:11px; color:var(--muted); }
+
+  /* MODAL CONTENT */
+  .modal-body { padding:24px; overflow-y:auto; flex:1; }
+  .modal-news-title { font-family:var(--font-display); font-size:20px; font-weight:700; color:var(--text); margin-bottom:12px; line-height:1.35; }
+  .hermes-analysis { font-size:14px; color:var(--text); line-height:1.8; padding:16px; background:rgba(0,229,255,0.04); border-radius:8px; border-left:3px solid var(--accent); min-height:80px; }
+  .news-full-text { font-size:14px; color:var(--muted); line-height:1.8; display:none; }
+  .modal-news-img { width:100%; height:220px; object-fit:cover; border-radius:8px; margin-bottom:16px; }
+  .modal-actions { display:flex; gap:10px; margin-top:20px; }
+  .btn-primary { flex:1; background:var(--accent); color:#000; border:none; border-radius:8px; padding:12px 20px; font-family:var(--font-body); font-weight:700; font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; transition:all 0.2s; }
+  .btn-primary:hover { background:#00c8e0; }
+  .btn-secondary { background:transparent; color:var(--muted); border:1px solid var(--border); border-radius:8px; padding:12px 20px; font-family:var(--font-body); font-size:13px; cursor:pointer; transition:all 0.2s; }
+  .btn-secondary:hover { border-color:var(--muted); color:var(--text); }
+  .modal-source-line { font-size:11px; color:var(--muted); margin-top:12px; text-align:center; }
+  .modal-source-line a { color:var(--accent); text-decoration:none; }
+
+  /* TYPING */
+  .typing-dots { display:inline-flex; gap:4px; align-items:center; }
+  .typing-dots span { width:5px; height:5px; background:var(--accent); border-radius:50%; animation:dot-bounce 1.2s ease-in-out infinite; }
+  .typing-dots span:nth-child(2){animation-delay:0.2s}
+  .typing-dots span:nth-child(3){animation-delay:0.4s}
+  @keyframes dot-bounce { 0%,80%,100%{transform:translateY(0);opacity:0.4} 40%{transform:translateY(-6px);opacity:1} }
+
+  /* FOOTER */
+  .footer { max-width:1400px; margin:0 auto; padding:24px 40px 40px; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; margin-top:20px; }
+  .footer-logo { font-family:var(--font-display); font-size:18px; font-weight:900; }
+  .footer-logo span { color:var(--accent); }
+  .footer-note { font-size:11px; color:var(--muted); max-width:500px; text-align:right; }
+
+  /* COLORS */
+  .c-crypto{color:#f7931a} .c-forex{color:#00d68f} .c-macro{color:#a78bfa} .c-geo{color:#ff6b6b} .c-mercados{color:var(--accent2)}
+
+  /* LOADING SPINNER */
+  .spinner { width:20px; height:20px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; }
+  @keyframes spin { to{transform:rotate(360deg)} }
+</style>
+</head>
+<body>
+
+<!-- TICKER -->
+<div class="ticker-bar">
+  <div class="ticker-label">MERCADOS EN VIVO</div>
+  <div style="overflow:hidden;flex:1">
+    <div class="ticker-track" id="tickerTrack"></div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="header-inner">
+    <a href="#" class="logo">Cast<span>Market</span><span class="logo-sub">ECONOMÍA · CRYPTO · FOREX · GEOPOLÍTICA</span></a>
+    <nav>
+      <a href="#" class="active">Inicio</a>
+      <a href="#">Crypto</a>
+      <a href="#">Forex</a>
+      <a href="#">Macro</a>
+      <a href="#">Geopolítica</a>
+      <a href="#">Argentina</a>
+    </nav>
+    <div class="live-badge"><div class="live-dot"></div>EN VIVO</div>
+  </div>
+</header>
+
+<!-- MARKET STRIP -->
+<div class="market-strip" id="marketStrip">
+  <div class="market-tile" style="opacity:0.4"><div class="market-name">Cargando...</div><div class="market-sym">···</div><div class="market-price" style="color:var(--muted)">——</div><div class="market-change">·</div></div>
+  <div class="market-tile" style="opacity:0.4"><div class="market-name">Cargando...</div><div class="market-sym">···</div><div class="market-price" style="color:var(--muted)">——</div><div class="market-change">·</div></div>
+  <div class="market-tile" style="opacity:0.4"><div class="market-name">Cargando...</div><div class="market-sym">···</div><div class="market-price" style="color:var(--muted)">——</div><div class="market-change">·</div></div>
+  <div class="market-tile" style="opacity:0.4"><div class="market-name">Cargando...</div><div class="market-sym">···</div><div class="market-price" style="color:var(--muted)">——</div><div class="market-change">·</div></div>
+  <div class="market-tile" style="opacity:0.4"><div class="market-name">Cargando...</div><div class="market-sym">···</div><div class="market-price" style="color:var(--muted)">——</div><div class="market-change">·</div></div>
+</div>
+<div class="geo-bar"><span>📍</span><span id="geoLabel">Detectando ubicación...</span><button class="geo-change-btn" onclick="togglePicker()">Cambiar región ▾</button></div>
+<div class="currency-picker" id="currencyPicker">
+  <div class="currency-picker-inner">
+    <span style="font-size:12px;color:var(--muted)">Región:</span>
+    <button class="region-btn" onclick="setRegion('AR',this)">🇦🇷 Argentina</button>
+    <button class="region-btn" onclick="setRegion('BR',this)">🇧🇷 Brasil</button>
+    <button class="region-btn" onclick="setRegion('MX',this)">🇲🇽 México</button>
+    <button class="region-btn" onclick="setRegion('US',this)">🇺🇸 EE.UU.</button>
+    <button class="region-btn" onclick="setRegion('EU',this)">🇪🇺 Europa</button>
+    <button class="region-btn" onclick="setRegion('GB',this)">🇬🇧 UK</button>
+    <button class="region-btn" onclick="setRegion('JP',this)">🇯🇵 Japón</button>
+    <button class="region-btn" onclick="setRegion('CN',this)">🇨🇳 China</button>
+    <button class="region-btn" onclick="setRegion('AU',this)">🇦🇺 Australia</button>
+    <button class="region-btn" onclick="setRegion('TR',this)">🇹🇷 Turquía</button>
+  </div>
+</div>
+
+<!-- HERO + SIDEBAR -->
+<div class="hero" id="heroSection">
+  <div class="hero-main" id="heroCard" onclick="openArticle(0)">
+    <div class="hero-img-area">
+      <img id="heroImg" src="https://images.unsplash.com/photo-1518546305927-5a555bb7020d?w=900&q=80" alt="">
+      <div class="hero-overlay"></div>
+      <div class="hero-category" id="heroCat">CARGANDO</div>
+      <button class="hero-watch-btn" onclick="event.stopPropagation();openArticle(0)">🎙️ Ver con Hermes</button>
+      <div class="hero-content">
+        <div class="hero-meta"><span class="hero-source" id="heroSource">—</span><span>·</span><span id="heroTime">—</span></div>
+        <div class="hero-title" id="heroTitle">Cargando noticias en tiempo real...</div>
+      </div>
+    </div>
+    <div class="hero-excerpt" id="heroExcerpt">Conectando con las fuentes de noticias...</div>
+  </div>
+  <div class="sidebar-news" id="sidebarNews">
+    <div class="sidebar-item" style="opacity:0.4;pointer-events:none"><div class="sidebar-content"><div class="sidebar-cat">Cargando...</div><div class="sidebar-title">Obteniendo noticias en tiempo real...</div></div></div>
+  </div>
+</div>
+
+<!-- CRYPTO SECTION -->
+<div class="sections-wrapper">
+  <div class="section-header">
+    <div class="section-title"><span style="display:inline-block;width:4px;height:20px;background:var(--accent);border-radius:2px"></span>Criptomonedas</div>
+    <a href="#" class="section-link">Ver todas →</a>
+  </div>
+  <div class="news-grid" id="cryptoGrid"><div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted)"><div class="spinner" style="margin:0 auto 12px"></div>Cargando noticias crypto...</div></div>
+</div>
+
+<!-- FOREX SECTION -->
+<div class="sections-wrapper" style="padding-top:0">
+  <div class="section-header">
+    <div class="section-title"><span style="display:inline-block;width:4px;height:20px;background:#00d68f;border-radius:2px"></span>Forex & Macro</div>
+    <a href="#" class="section-link">Ver todas →</a>
+  </div>
+  <div class="news-grid" id="forexGrid"><div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted)"><div class="spinner" style="margin:0 auto 12px"></div>Cargando noticias forex...</div></div>
+</div>
+
+<!-- GEOPOLITICA SECTION -->
+<div class="sections-wrapper" style="padding-top:0">
+  <div class="section-header">
+    <div class="section-title"><span style="display:inline-block;width:4px;height:20px;background:#ff6b6b;border-radius:2px"></span>Geopolítica & Mercados</div>
+    <a href="#" class="section-link" style="color:#ff6b6b">Ver todas →</a>
+  </div>
+  <div class="geo-alert"><span style="font-size:18px">⚠️</span><div><strong>ALERTA GEOPOLÍTICA</strong> — Conflictos activos impactan petróleo, gas, commodities y divisas de refugio.</div></div>
+  <div class="geo-grid">
+    <div class="geo-card" onclick="openGeoModal('iran')">
+      <div class="geo-card-header"><div class="geo-dot"></div>CONFLICTO ACTIVO · IRÁN / MEDIO ORIENTE</div>
+      <div class="geo-img"><img src="https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=800&q=80" alt="Iran conflict" onerror="this.style.display='none'"></div>
+      <div class="geo-body">
+        <div class="geo-pills"><span class="geo-pill oil">🛢 PETRÓLEO</span><span class="geo-pill gold">🥇 ORO</span><span class="geo-pill btc">₿ BTC</span></div>
+        <div class="geo-headline">Estrecho de Ormuz bajo tensión: mayor disrupción energética desde los años 70</div>
+        <div class="geo-summary">El conflicto EE.UU.–Israel–Irán cerró parcialmente el Estrecho de Ormuz. El Brent superó $100/barril. La AIE lo califica como la mayor disrupción de la historia del mercado energético global.</div>
+        <div class="geo-tiles">
+          <div class="geo-tile"><div class="geo-tile-label">BRENT</div><div class="geo-tile-val up">$103.40</div></div>
+          <div class="geo-tile"><div class="geo-tile-label">ORO</div><div class="geo-tile-val up">$3,285</div></div>
+          <div class="geo-tile"><div class="geo-tile-label">BTC</div><div class="geo-tile-val up">$104,820</div></div>
+        </div>
+        <div class="geo-footer"><span style="color:var(--muted)">Oxford Economics · Al Jazeera · CFR</span><button class="card-ai-btn" onclick="event.stopPropagation();openGeoModal('iran')">🎙️ Hermes</button></div>
+      </div>
+    </div>
+    <div class="geo-card" onclick="openGeoModal('ucrania')">
+      <div class="geo-card-header"><div class="geo-dot"></div>CONFLICTO ACTIVO · UCRANIA / RUSIA</div>
+      <div class="geo-img"><img src="https://images.unsplash.com/photo-1646741701160-c217f7e4ed14?w=800&q=80" alt="Ukraine conflict" onerror="this.style.display='none'"></div>
+      <div class="geo-body">
+        <div class="geo-pills"><span class="geo-pill gas">⛽ GAS</span><span class="geo-pill euro">€ EURO</span><span class="geo-pill wheat">🌾 TRIGO</span></div>
+        <div class="geo-headline">Ucrania contrae su economía en Q1 2026: bombardeos destruyen infraestructura energética</div>
+        <div class="geo-summary">El PIB de Ucrania cayó -0.5% en Q1 2026. Rusia lanzó 265 drones en una noche. El déficit fiscal ucraniano es 23.6% del PBI, financiado por ayuda externa de UE y FMI.</div>
+        <div class="geo-tiles">
+          <div class="geo-tile"><div class="geo-tile-label">GAS TTF</div><div class="geo-tile-val up">€42.80</div></div>
+          <div class="geo-tile"><div class="geo-tile-label">EUR/USD</div><div class="geo-tile-val down">1.0842</div></div>
+          <div class="geo-tile"><div class="geo-tile-label">TRIGO</div><div class="geo-tile-val down">$541</div></div>
+        </div>
+        <div class="geo-footer"><span style="color:var(--muted)">EBRD · Kyiv Post · ISW</span><button class="card-ai-btn" onclick="event.stopPropagation();openGeoModal('ucrania')">🎙️ Hermes</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <div class="footer-logo">Cast<span>Market</span></div>
+  <div class="footer-note">Presentado por Hermes IA. Noticias tomadas de fuentes públicas — fuente original indicada en cada artículo. No constituye asesoramiento financiero.</div>
+</div>
+
+<!-- ARTICLE MODAL -->
+<div class="modal-overlay" id="modalOverlay" onclick="handleOverlayClick(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+
+    <!-- MODE SWITCHER -->
+    <div class="mode-switcher">
+      <button class="mode-btn active" id="btnHermes" onclick="switchMode('hermes')">🎙️ Ver con Hermes</button>
+      <button class="mode-btn" id="btnRead" onclick="switchMode('read')">📰 Leer noticia</button>
+    </div>
+
+    <!-- HERMES PANEL -->
+    <div id="hermesPanel">
+      <div class="hermes-screen">
+        <div class="tv-scanlines"></div>
+        <div class="tv-corners"><span></span><span></span><span></span><span></span></div>
+        <div class="hermes-content">
+          <div class="hermes-avatar">⚡<div class="hermes-ring"></div></div>
+          <div class="hermes-info">
+            <div class="hermes-name">HERMES · IA ANCHOR</div>
+            <div class="hermes-role">Presentador de Noticias — CastMarket</div>
+            <div class="hermes-status" id="hermesStatus">
+              <div class="wave-bars"><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div></div>
+              <span id="hermesStatusText">En vivo</span>
+            </div>
+          </div>
+        </div>
+        <div class="lower-third">
+          <div class="lower-left">
+            <div class="on-air">EN VIVO</div>
+            <div class="lower-headline" id="lowerHeadline">CastMarket</div>
+          </div>
+          <div class="lower-clock" id="modalClock"></div>
+        </div>
+      </div>
+      <div class="audio-player" id="audioPlayer">
+        <span style="font-size:18px">🔊</span>
+        <div class="audio-progress"><div class="audio-progress-bar" id="audioBar" style="width:0%"></div></div>
+        <span class="audio-time" id="audioTime">0:00</span>
+      </div>
+    </div>
+
+    <!-- MODAL BODY -->
+    <div class="modal-body">
+      <div class="modal-news-title" id="modalTitle">Cargando...</div>
+      <div id="hermesAnalysis" class="hermes-analysis">
+        <div class="typing-dots"><span></span><span></span><span></span></div>
+      </div>
+      <div id="newsFullText" class="news-full-text"></div>
+      <div class="modal-actions">
+        <button class="btn-primary" id="generateBtn" onclick="generateAnalysis()">🎙️ Generar análisis de Hermes</button>
+        <button class="btn-secondary" onclick="closeModal()">Cerrar</button>
+      </div>
+      <div class="modal-source-line" id="modalSourceLine"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// CONFIGURACIÓN — REEMPLAZÁ TUS KEYS ACÁ
+// ═══════════════════════════════════════════════════
+const CONFIG = {
+  ANTHROPIC_KEY: localStorage.getItem('cm_ak') || '',
+  ELEVENLABS_KEY: localStorage.getItem('cm_ek') || '',
+  ELEVENLABS_VOICE_ID: 'pNInz6obpgDQGcFmaJgB',
+  RSS2JSON_KEY: 'pdwjjku0bm1vcubj9jhmhnz9u0mrpabevev5f9ky',
+};
+
+// ═══════════════════════════════════════════════════
+// RSS FEEDS
+// ═══════════════════════════════════════════════════
+const RSS_FEEDS = {
+  crypto: [
+    'https://www.coindesk.com/arc/outboundfeeds/rss/',
+    'https://cointelegraph.com/rss',
+  ],
+  forex: [
+    'https://www.fxstreet.com/rss/news',
+    'https://feeds.reuters.com/reuters/businessNews',
+  ],
+  argentina: [
+    'https://www.ambito.com/rss/pages/economia.xml',
+    'https://www.infobae.com/feeds/rss/economia/',
+  ]
+};
+
+// ═══════════════════════════════════════════════════
+// FX RATES
+// ═══════════════════════════════════════════════════
+const FX = {
+  ARS:{name:'Peso Arg.',flag:'🇦🇷',rate:1215.5,change:+0.31},
+  BRL:{name:'Real',flag:'🇧🇷',rate:5.682,change:-0.18},
+  MXN:{name:'Peso Mex.',flag:'🇲🇽',rate:17.24,change:+0.09},
+  EUR:{name:'Euro',flag:'🇪🇺',rate:0.9224,change:-0.12},
+  GBP:{name:'Libra',flag:'🇬🇧',rate:0.7861,change:+0.08},
+  JPY:{name:'Yen',flag:'🇯🇵',rate:144.82,change:+0.34},
+  CNY:{name:'Yuan',flag:'🇨🇳',rate:7.241,change:+0.06},
+  AUD:{name:'Dólar Aus.',flag:'🇦🇺',rate:1.5412,change:-0.21},
+  CHF:{name:'Franco',flag:'🇨🇭',rate:0.8823,change:-0.07},
+  TRY:{name:'Lira',flag:'🇹🇷',rate:38.42,change:+1.12},
+  XAU:{name:'Oro',flag:'🥇',rate:0.000305,change:-0.43},
+  BTC:{name:'Bitcoin',flag:'₿',rate:0.00000952,change:+2.34},
+};
+const REGIONS = {
+  AR:{label:'Argentina 🇦🇷',tiles:['ARS','BRL','EUR','BTC','XAU']},
+  BR:{label:'Brasil 🇧🇷',tiles:['BRL','ARS','EUR','BTC','XAU']},
+  MX:{label:'México 🇲🇽',tiles:['MXN','EUR','GBP','BTC','XAU']},
+  US:{label:'EE.UU. 🇺🇸',tiles:['EUR','GBP','JPY','BTC','XAU']},
+  EU:{label:'Europa 🇪🇺',tiles:['EUR','GBP','CHF','BTC','XAU']},
+  GB:{label:'Reino Unido 🇬🇧',tiles:['GBP','EUR','CHF','BTC','XAU']},
+  JP:{label:'Japón 🇯🇵',tiles:['JPY','CNY','AUD','BTC','XAU']},
+  CN:{label:'China 🇨🇳',tiles:['CNY','JPY','EUR','BTC','XAU']},
+  AU:{label:'Australia 🇦🇺',tiles:['AUD','JPY','CNY','BTC','XAU']},
+  TR:{label:'Turquía 🇹🇷',tiles:['TRY','EUR','GBP','BTC','XAU']},
+  DEFAULT:{label:'Global 🌐',tiles:['EUR','GBP','JPY','BTC','XAU']},
+};
+const COUNTRY_MAP = {AR:'AR',UY:'AR',PY:'AR',BO:'AR',BR:'BR',MX:'MX',CO:'MX',PE:'MX',CL:'MX',US:'US',CA:'US',DE:'EU',FR:'EU',IT:'EU',ES:'EU',PT:'EU',NL:'EU',GB:'GB',IE:'GB',JP:'JP',CN:'CN',HK:'CN',AU:'AU',NZ:'AU',TR:'TR'};
+let _region = 'DEFAULT';
+
+function renderMarket(region){
+  _region = region;
+  const cfg = REGIONS[region]||REGIONS.DEFAULT;
+  document.getElementById('marketStrip').innerHTML = cfg.tiles.map(sym=>{
+    const fx=FX[sym]; if(!fx) return '';
+    const up=fx.change>=0, cls=up?'up':'down', arr=up?'▲':'▼';
+    let price,label;
+    if(sym==='XAU'){price='$'+Math.round(1/fx.rate).toLocaleString('en-US');label='Oro / oz';}
+    else if(sym==='BTC'){price='$'+Math.round(1/fx.rate).toLocaleString('en-US');label='BTC / USD';}
+    else if(fx.rate>10){price=fx.flag+' '+fx.rate.toFixed(2);label='USD / '+sym;}
+    else{price=fx.rate.toFixed(4);label=sym+' / USD';}
+    return `<div class="market-tile ${cls}"><div class="market-name">${fx.flag} ${fx.name}</div><div class="market-sym">${label}</div><div class="market-price">${price}</div><div class="market-change ${cls}">${arr} ${Math.abs(fx.change).toFixed(2)}%</div></div>`;
+  }).join('');
 }
+
+function setRegion(code,btn){
+  document.querySelectorAll('.region-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  const cfg=REGIONS[code]||REGIONS.DEFAULT;
+  document.getElementById('geoLabel').textContent='Divisas para: '+cfg.label;
+  renderMarket(code);
+  document.getElementById('currencyPicker').style.display='none';
+  try{localStorage.setItem('cm_region',code);}catch(e){}
+}
+
+function togglePicker(){
+  const p=document.getElementById('currencyPicker');
+  p.style.display=p.style.display==='none'?'block':'none';
+}
+
+async function initGeo(){
+  try{const s=localStorage.getItem('cm_region');if(s&&REGIONS[s]){setRegion(s);return;}}catch(e){}
+  const tz=Intl.DateTimeFormat().resolvedOptions().timeZone||'';
+  let r='DEFAULT';
+  if(tz.includes('America/Argentina'))r='AR';
+  else if(tz.match(/America\/(Sao_Paulo|Manaus|Recife)/))r='BR';
+  else if(tz.includes('America/Mexico'))r='MX';
+  else if(tz.match(/America\/(New_York|Chicago|Los_Angeles)/))r='US';
+  else if(tz.includes('Europe/London'))r='GB';
+  else if(tz.includes('Europe/'))r='EU';
+  else if(tz.includes('Asia/Tokyo'))r='JP';
+  else if(tz.match(/Asia\/(Shanghai|Hong_Kong)/))r='CN';
+  else if(tz.includes('Australia/'))r='AU';
+  const cfg=REGIONS[r];
+  document.getElementById('geoLabel').textContent='Divisas para: '+cfg.label;
+  renderMarket(r);
+  try{
+    const res=await fetch('https://ipinfo.io/json',{signal:AbortSignal.timeout(4000)});
+    const d=await res.json();
+    if(d.country){const rr=COUNTRY_MAP[d.country]||'DEFAULT';const cc=REGIONS[rr];document.getElementById('geoLabel').textContent=`Divisas para: ${cc.label}${d.city?' · '+d.city:''}`;renderMarket(rr);}
+  }catch(e){}
+}
+
+setInterval(()=>{Object.values(FX).forEach(f=>{f.rate*=(1+(Math.random()-0.5)*0.0006);f.change+=(Math.random()-0.5)*0.03;f.change=Math.max(-5,Math.min(5,f.change));});renderMarket(_region);},10000);
+
+// ═══════════════════════════════════════════════════
+// TICKER
+// ═══════════════════════════════════════════════════
+const TICKER_DATA=[
+  {sym:'BTC/USD',price:'$104,820',change:'+2.34%',up:true},
+  {sym:'ETH/USD',price:'$2,618',change:'+1.87%',up:true},
+  {sym:'BNB/USD',price:'$652',change:'+0.91%',up:true},
+  {sym:'SOL/USD',price:'$178',change:'-1.23%',up:false},
+  {sym:'EUR/USD',price:'1.0842',change:'-0.12%',up:false},
+  {sym:'GBP/USD',price:'1.2731',change:'+0.08%',up:true},
+  {sym:'USD/JPY',price:'144.82',change:'+0.34%',up:false},
+  {sym:'XAU/USD',price:'$3,285',change:'-0.43%',up:false},
+  {sym:'SPX',price:'5,341',change:'+0.67%',up:true},
+  {sym:'BRENT',price:'$103.40',change:'+4.21%',up:true},
+  {sym:'PEPE',price:'$0.0000142',change:'+5.21%',up:true},
+  {sym:'DXY',price:'102.14',change:'-0.31%',up:false},
+];
+function buildTicker(){
+  const t=document.getElementById('tickerTrack');
+  const all=[...TICKER_DATA,...TICKER_DATA];
+  t.innerHTML=all.map(d=>`<div class="ticker-item"><span class="ticker-sym">${d.sym}</span><span class="ticker-price">${d.price}</span><span class="ticker-change ${d.up?'up':'down'}">${d.up?'▲':'▼'} ${d.change}</span></div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════
+// NEWS FETCHING
+// ═══════════════════════════════════════════════════
+let allArticles = [];
+const CAT_IMGS = {
+  crypto: 'https://images.unsplash.com/photo-1622630998477-20aa696ecb05?w=600&q=80',
+  forex:  'https://images.unsplash.com/photo-1580519542036-c47de6196ba5?w=600&q=80',
+  macro:  'https://images.unsplash.com/photo-1541354329998-f4d9a9f9297f?w=600&q=80',
+  argentina:'https://images.unsplash.com/photo-1589909202802-8f4aadce1849?w=600&q=80',
+  default:'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=600&q=80',
+};
+
+async function fetchFeed(url, category){
+  try{
+    const api=`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&api_key=${CONFIG.RSS2JSON_KEY}&count=6`;
+    const r=await fetch(api);
+    const d=await r.json();
+    if(d.status==='ok') return d.items.map(i=>({
+      title: i.title,
+      excerpt: stripHtml(i.description||i.content||'').substring(0,200)+'...',
+      link: i.link,
+      source: new URL(i.link).hostname.replace('www.',''),
+      pubDate: i.pubDate,
+      image: i.thumbnail||i.enclosure?.link||CAT_IMGS[category]||CAT_IMGS.default,
+      category,
+    }));
+  }catch(e){ return []; }
+  return [];
+}
+
+function stripHtml(html){ return html.replace(/<[^>]*>/g,'').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').trim(); }
+
+function timeAgo(dateStr){
+  const diff=(Date.now()-new Date(dateStr))/1000/60;
+  if(diff<60) return `Hace ${Math.round(diff)} min`;
+  if(diff<1440) return `Hace ${Math.round(diff/60)}h`;
+  return `Hace ${Math.round(diff/1440)}d`;
+}
+
+function catColor(cat){
+  const m={crypto:'#f7931a',forex:'#00d68f',macro:'#a78bfa',argentina:'#ff6b35'};
+  return m[cat]||'var(--accent)';
+}
+function catLabel(cat){
+  const m={crypto:'CRYPTO',forex:'FOREX',macro:'MACRO',argentina:'ARGENTINA'};
+  return m[cat]||cat.toUpperCase();
+}
+
+async function loadNews(){
+  const cryptoP = Promise.all(RSS_FEEDS.crypto.map(u=>fetchFeed(u,'crypto')));
+  const forexP  = Promise.all(RSS_FEEDS.forex.map(u=>fetchFeed(u,'forex')));
+  const argP    = Promise.all(RSS_FEEDS.argentina.map(u=>fetchFeed(u,'argentina')));
+
+  const [cryptoArr, forexArr, argArr] = await Promise.all([cryptoP, forexP, argP]);
+
+  const crypto = cryptoArr.flat().slice(0,6);
+  const forex  = forexArr.flat().slice(0,6);
+  const arg    = argArr.flat().slice(0,3);
+
+  allArticles = [...crypto, ...forex, ...arg];
+
+  // Hero
+  if(allArticles.length > 0){
+    const hero = allArticles[0];
+    document.getElementById('heroImg').src = hero.image||CAT_IMGS.default;
+    document.getElementById('heroCat').textContent = catLabel(hero.category);
+    document.getElementById('heroSource').textContent = hero.source;
+    document.getElementById('heroTime').textContent = timeAgo(hero.pubDate);
+    document.getElementById('heroTitle').textContent = hero.title;
+    document.getElementById('heroExcerpt').textContent = hero.excerpt;
+  }
+
+  // Sidebar (articles 1-5)
+  const sidebar = allArticles.slice(1,6);
+  document.getElementById('sidebarNews').innerHTML = sidebar.map((a,i)=>`
+    <div class="sidebar-item" onclick="openArticle(${i+1})">
+      <img class="sidebar-thumb" src="${a.image||CAT_IMGS.default}" onerror="this.src='${CAT_IMGS.default}'" alt="">
+      <div class="sidebar-content">
+        <div class="sidebar-cat" style="color:${catColor(a.category)}">${catLabel(a.category)}</div>
+        <div class="sidebar-title">${a.title}</div>
+        <div class="sidebar-meta"><span>${a.source} · ${timeAgo(a.pubDate)}</span><span class="sidebar-ai-pill" onclick="event.stopPropagation();openArticle(${i+1})">🎙️ Hermes</span></div>
+      </div>
+    </div>`).join('');
+
+  // Crypto grid
+  renderGrid('cryptoGrid', crypto.slice(0,3));
+  // Forex grid
+  renderGrid('forexGrid', forex.slice(0,3));
+}
+
+function renderGrid(id, articles){
+  const el=document.getElementById(id);
+  if(!articles.length){el.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted)">No se pudieron cargar las noticias. Verificá tu conexión.</div>';return;}
+  el.innerHTML=articles.map((a,i)=>{
+    const idx=allArticles.indexOf(a);
+    return `<div class="news-card" onclick="openArticle(${idx})">
+      <div class="card-thumb"><img src="${a.image||CAT_IMGS.default}" onerror="this.src='${CAT_IMGS.default}'" alt="" style="width:100%;height:100%;object-fit:cover"></div>
+      <div class="card-body">
+        <div class="card-cat" style="color:${catColor(a.category)}">${catLabel(a.category)}</div>
+        <div class="card-title">${a.title}</div>
+        <div class="card-footer"><div><div class="card-source">${a.source}</div><div class="card-meta">${timeAgo(a.pubDate)}</div></div><button class="card-ai-btn" onclick="event.stopPropagation();openArticle(${idx})">🎙️ Hermes</button></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════
+// MODAL & HERMES
+// ═══════════════════════════════════════════════════
+let currentArticle = null;
+let currentMode = 'hermes';
+let clockInterval = null;
+let analysisGenerated = false;
+let audioEl = null;
+
+function openArticle(idx){
+  const a = allArticles[idx];
+  if(!a) return;
+  currentArticle = a;
+  currentMode = 'hermes';
+  analysisGenerated = false;
+
+  document.getElementById('modalTitle').textContent = a.title;
+  document.getElementById('lowerHeadline').textContent = a.title.substring(0,60)+'…';
+  document.getElementById('hermesAnalysis').innerHTML = '<div style="color:var(--muted);font-size:13px">Presioná "Generar análisis de Hermes" para que presente esta noticia.</div>';
+  document.getElementById('newsFullText').style.display = 'none';
+  document.getElementById('newsFullText').innerHTML = '';
+  document.getElementById('generateBtn').style.display = 'flex';
+  document.getElementById('generateBtn').textContent = '🎙️ Generar análisis de Hermes';
+  document.getElementById('generateBtn').disabled = false;
+  document.getElementById('modalSourceLine').innerHTML = `Fuente: <a href="${a.link}" target="_blank">${a.source}</a> · ${timeAgo(a.pubDate)}`;
+  document.getElementById('hermesPanel').style.display = 'block';
+  document.getElementById('hermesStatus').innerHTML = `<div class="wave-bars">${Array(7).fill('<div class="wave-bar"></div>').join('')}</div><span id="hermesStatusText">En vivo</span>`;
+  document.getElementById('audioPlayer').classList.remove('visible');
+
+  switchMode('hermes');
+  updateClock();
+  clockInterval = setInterval(updateClock, 1000);
+  document.getElementById('modalOverlay').classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+
+function openGeoModal(topic){
+  const geoArticles = {
+    iran: {
+      title: 'Estrecho de Ormuz bajo tensión: la mayor disrupción energética desde los años 70 amenaza la economía global',
+      excerpt: 'El conflicto EE.UU.–Israel–Irán provocó el cierre parcial del Estrecho de Ormuz, por donde transita el 20% del petróleo mundial.',
+      link: 'https://www.oxfordeconomics.com/iran-conflict-us-israel-iran-war-2026/',
+      source: 'Oxford Economics · Al Jazeera · CFR',
+      pubDate: new Date().toISOString(),
+      image: 'https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=800&q=80',
+      category: 'geopolitica',
+      prompt: 'Eres Hermes, presentador IA de noticias económicas de CastMarket. Explica en 4 oraciones en español el impacto económico del conflicto Irán 2026: el cierre del Estrecho de Ormuz, el Brent sobre $100, la amenaza de estanflación global, y qué significa para inversores en crypto, oro y acciones. Tono profesional como un anchor de Bloomberg.',
+    },
+    ucrania: {
+      title: 'Ucrania contrae su economía en Q1 2026: bombardeos rusos destruyen infraestructura energética clave',
+      excerpt: 'El PIB de Ucrania cayó -0.5% en Q1 2026, primera contracción tras dos años de recuperación.',
+      link: 'https://www.ebrd.com/home/news-and-events/news/2026/ukraine-faces-slower-growth-as-war-drags-on.html',
+      source: 'EBRD · Kyiv Post · ISW',
+      pubDate: new Date().toISOString(),
+      image: 'https://images.unsplash.com/photo-1646741701160-c217f7e4ed14?w=800&q=80',
+      category: 'geopolitica',
+      prompt: 'Eres Hermes, presentador IA de noticias económicas de CastMarket. Explica en 4 oraciones en español el impacto financiero del conflicto Ucrania-Rusia en 2026: contracción del PIB ucraniano, impacto en gas natural europeo, presión sobre el euro, y efecto en commodities como trigo. Mencioná qué activos se benefician como refugio. Tono anchor de Bloomberg.',
+    }
+  };
+  const a = geoArticles[topic];
+  if(!a) return;
+  currentArticle = a;
+  openArticle(-1);
+  // Override with geo article
+  currentArticle = a;
+  document.getElementById('modalTitle').textContent = a.title;
+  document.getElementById('lowerHeadline').textContent = a.title.substring(0,60)+'…';
+  document.getElementById('modalSourceLine').innerHTML = `Fuente: <a href="${a.link}" target="_blank">${a.source}</a>`;
+}
+
+function switchMode(mode){
+  currentMode = mode;
+  document.getElementById('btnHermes').classList.toggle('active', mode==='hermes');
+  document.getElementById('btnRead').classList.toggle('active', mode==='read');
+  if(mode==='hermes'){
+    document.getElementById('hermesPanel').style.display = 'block';
+    document.getElementById('hermesAnalysis').style.display = 'block';
+    document.getElementById('newsFullText').style.display = 'none';
+    document.getElementById('generateBtn').style.display = analysisGenerated ? 'none' : 'flex';
+  } else {
+    document.getElementById('hermesPanel').style.display = 'none';
+    document.getElementById('hermesAnalysis').style.display = 'none';
+    document.getElementById('generateBtn').style.display = 'none';
+    const ft = document.getElementById('newsFullText');
+    ft.style.display = 'block';
+    if(!ft.innerHTML && currentArticle){
+      ft.innerHTML = `<img src="${currentArticle.image||CAT_IMGS.default}" class="modal-news-img" onerror="this.style.display='none'"><p>${currentArticle.excerpt}</p><br><a href="${currentArticle.link}" target="_blank" style="color:var(--accent)">→ Leer artículo completo en ${currentArticle.source}</a>`;
+    }
+  }
+}
+
+async function generateAnalysis(){
+  if(!currentArticle) return;
+  const btn = document.getElementById('generateBtn');
+  const analysis = document.getElementById('hermesAnalysis');
+  const statusEl = document.getElementById('hermesStatus');
+
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Hermes está analizando...';
+  analysis.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+
+  // Detect language
+  const lang = detectLang();
+  const langInstruction = lang==='es' ? 'en español' : lang==='pt' ? 'en portugués' : lang==='en' ? 'in English' : 'en español';
+
+  const prompt = currentArticle.prompt ||
+    `Eres Hermes, presentador IA de noticias económicas de CastMarket. Presentá ${langInstruction} esta noticia financiera en 3-4 oraciones concisas, con tono profesional de anchor de Bloomberg o Reuters. Solo el análisis, sin saludos. Noticia: "${currentArticle.title}". Contexto: ${currentArticle.excerpt}`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','x-api-key': CONFIG.ANTHROPIC_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 400,
+        system: 'Eres Hermes, presentador IA de CastMarket. Respondés SOLO con el análisis. Sin saludos, sin meta-comentarios, sin "Claro que sí". Máximo 4 oraciones. Tono anchor de noticiero económico internacional.',
+        messages:[{role:'user',content:prompt}]
+      })
+    });
+    const data = await res.json();
+    const text = data.content?.map(b=>b.text||'').join('')||'No se pudo generar el análisis.';
+
+    analysis.innerHTML = '';
+    analysis.style.color = 'var(--text)';
+    let i=0;
+    function type(){
+      if(i<text.length){ analysis.textContent+=text[i++]; setTimeout(type,16); }
+      else {
+        analysisGenerated = true;
+        btn.style.display = 'none';
+        statusEl.innerHTML = '<span style="color:var(--green)">✓ Análisis completado</span>';
+        if(CONFIG.ELEVENLABS_KEY && CONFIG.ELEVENLABS_KEY !== 'TU_ELEVENLABS_KEY_ACÁ'){
+          speakWithHermes(text);
+        }
+      }
+    }
+    type();
+
+  } catch(err){
+    analysis.innerHTML = `<span style="color:var(--red)">⚠ No se pudo conectar con la API. Verificá tu API key de Anthropic en el archivo config.</span>`;
+    btn.disabled = false;
+    btn.textContent = '🎙️ Reintentar';
+  }
+}
+
+async function speakWithHermes(text){
+  try{
+    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${CONFIG.ELEVENLABS_VOICE_ID}`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json','xi-api-key':CONFIG.ELEVENLABS_KEY},
+      body:JSON.stringify({text, model_id:'eleven_multilingual_v2', voice_settings:{stability:0.5,similarity_boost:0.8}})
+    });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    audioEl = new Audio(url);
+    const player = document.getElementById('audioPlayer');
+    const bar = document.getElementById('audioBar');
+    const time = document.getElementById('audioTime');
+    player.classList.add('visible');
+    audioEl.ontimeupdate = ()=>{
+      const pct = (audioEl.currentTime/audioEl.duration)*100||0;
+      bar.style.width = pct+'%';
+      const s = Math.floor(audioEl.currentTime);
+      time.textContent = `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`;
+    };
+    audioEl.play();
+    document.getElementById('hermesStatus').innerHTML = `<div class="wave-bars">${Array(7).fill('<div class="wave-bar"></div>').join('')}</div><span style="color:var(--accent)">Hermes está hablando...</span>`;
+  }catch(e){console.log('ElevenLabs error:',e);}
+}
+
+function detectLang(){
+  const tz=Intl.DateTimeFormat().resolvedOptions().timeZone||'';
+  if(tz.match(/America\/(Argentina|Bogota|Lima|Santiago|Mexico|Caracas|Montevideo|Asuncion|La_Paz|Guayaquil|Managua|Panama|Costa_Rica|El_Salvador|Tegucigalpa|Guatemala)/)) return 'es';
+  if(tz.match(/America\/(Sao_Paulo|Manaus|Recife|Fortaleza|Belem|Maceio|Cuiaba|Porto_Velho|Boa_Vista)/)) return 'pt';
+  return 'en';
+}
+
+function updateClock(){
+  const now = new Date();
+  document.getElementById('modalClock').textContent = now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+function closeModal(){
+  document.getElementById('modalOverlay').classList.remove('active');
+  document.body.style.overflow = '';
+  clearInterval(clockInterval);
+  if(audioEl){audioEl.pause();audioEl=null;}
+  document.getElementById('audioPlayer').classList.remove('visible');
+}
+
+function handleOverlayClick(e){
+  if(e.target===document.getElementById('modalOverlay')) closeModal();
+}
+
+// ═══════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════
+buildTicker();
+initGeo();
+loadNews();
+</script>
+</body>
+</html>
