@@ -6,8 +6,18 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { prompt, system } = req.body;
-  if (!prompt) return res.status(400).json({ error: 'Missing prompt' });
+  // Parse body
+  let body = req.body;
+  if (typeof body === 'string') {
+    try { body = JSON.parse(body); } catch(e) {}
+  }
+
+  const prompt = body?.prompt;
+  const system = body?.system;
+
+  if (!prompt) {
+    return res.status(400).json({ error: 'Missing prompt', received: JSON.stringify(body) });
+  }
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
